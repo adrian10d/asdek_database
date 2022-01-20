@@ -1,10 +1,9 @@
-import _setup
+import db_restore
 import random
 import passwords
 import csv
 from datetime import timedelta
 from datetime import datetime
-
 
 
 def random_line(filename):
@@ -126,19 +125,13 @@ def insert_random_pomiary():
                               GM[i], OK[i], PM[i], PD[i]))
 
 
-
-
-
-
-
-
 # Open a cursor to perform database operations
-cur = _setup.conn.cursor()
+cur = db_restore.conn.cursor()
 
 insert_random_pomiary()
 # Commit changes
-#_setup.conn.commit()
+# _setup.conn.commit()
 
 cur.close()
 
-_setup.conn.close()
+db_restore.conn.close()
