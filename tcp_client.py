@@ -57,12 +57,49 @@ def request_raport():
 
 
 def request_archiwum():
+    nazwa_stacji_diagnostycznej = input("Nazwa stacji diagnostycznej: ")
+    client.send(str.encode(nazwa_stacji_diagnostycznej))
+    while True:
+        response = client.recv(2048).decode()
+        if response == '0':
+            break
+        print(response)
+
+
+def request_przewoznicy():
 
     while True:
         response = client.recv(2048).decode()
         if response == '0':
             break
         print(response)
+
+
+def request_raportg():
+    nazwa_stacji_diagnostycznej = input("Nazwa stacji diagnostycznej: ")
+    client.send(str.encode(nazwa_stacji_diagnostycznej))
+    response = client.recv(2048).decode()
+    print(response)
+
+
+def request_pomiar():
+
+    pomiar_dict = {
+        "data": "13.02.2020",
+        "godzina": "8:31",
+        "stacja": "Sopot 1",
+        "predkosc": 10,
+        "liczba_osi": 12,
+        "dlugosc": 99,
+        "gh": "null",
+        "gm": "null",
+        "ok": "OSTR",
+        "pm": "OJOJ"
+    }
+    pomiar_json = json.dumps(pomiar_dict, ensure_ascii=False)
+    client.send(str.encode(pomiar_json))
+    response = client.recv(2048).decode()
+    print(response)
 
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -72,9 +109,15 @@ if request_choice == 'login':
     request_log_in()
 elif request_choice == 'ersat':
     request_esrat()
-elif request_choice == 'raport1' or 'raport100':
+elif request_choice == 'raport1' or request_choice == 'raport100':
     request_raport()
 elif request_choice == 'archiwum':
     request_archiwum()
+elif request_choice == 'przewoznicy':
+    request_przewoznicy()
+elif request_choice == 'raportg':
+    request_raportg()
+elif request_choice == 'pomiar':
+    request_pomiar()
 
 client.close()

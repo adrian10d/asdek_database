@@ -1,9 +1,26 @@
-import db_restore
 import random
-import passwords
 import csv
+import json
+import psycopg2
 from datetime import timedelta
 from datetime import datetime
+import server_functions as sf
+
+# Read the config file
+with open('config.json', 'r', encoding='utf-8') as config_file:
+    config = json.load(config_file)
+
+    # Establish database connection
+    db_connection = psycopg2.connect(
+        host=config["db_host"],
+        database=config["db_database"],
+        user=config["db_user"],
+        password=config["db_password"],
+        port=config["db_port"]
+        )
+
+    # Open a cursor to perform database operations
+    cursor = db_connection.cursor()
 
 
 def random_line(filename):
@@ -34,19 +51,17 @@ def random_date(start, end):
 
 
 def insert_random_uzytkownik():
-    imie, nazwisko = random_line('imiona.txt'), random_line('nazwiska.txt')
+    imie, nazwisko = random_line('_files\\imiona.txt'), random_line('_files\\nazwiska.txt')
     login = generate_login(imie, nazwisko)
-    haslo = passwords.hash(generate_password(imie, nazwisko))
+    haslo = sf.hash_function(generate_password(imie, nazwisko))
 
-    command = "INSERT INTO uzytkownicy (imie, nazwisko, login, haslo) VALUES(%s, %s, %s, %s);"\
-        .format(imie, nazwisko, login, haslo)
+    command = "INSERT INTO uzytkownicy (imie, nazwisko, login, haslo) VALUES(%s, %s, %s, %s)"\
 
-    # Execute a query
-    cur.execute(command, (imie, nazwisko, login, haslo))
+    cursor.execute(command, (imie, nazwisko, login, haslo))
 
 
 def insert_przewoznicy_from_csv():
-    with open('przewoznicy.csv') as csv_file:
+    with open('_files\\przewoznicy.csv') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=';')
         line_count = 0
         przewoznik, przewoz_osob_nr_licencji, przewoz_rzeczy_nr_licencji, swiadczenie_uslug_trakcyjnych_nr_licencji =\
@@ -67,11 +82,11 @@ def insert_przewoznicy_from_csv():
 
         for i in range(len(przewoznik)):
             print(i)
-            cur.execute(command, (przewoznik[i], przewoz_osob_nr_licencji[i], przewoz_rzeczy_nr_licencji[i],
-                                  swiadczenie_uslug_trakcyjnych_nr_licencji[i]))
+            cursor.execute(command, (przewoznik[i], przewoz_osob_nr_licencji[i], przewoz_rzeczy_nr_licencji[i],
+                                     swiadczenie_uslug_trakcyjnych_nr_licencji[i]))
 
 
-def insert_random_pomiary():
+def insert_random_pomiary(n):
     data, godzina, stacja, predkosc, liczba_osi, dlugosc, masa, GH, GM, OK, PM, PD =\
     [], [], [], [], [], [], [], [], [], [], [], []
 
@@ -81,11 +96,11 @@ def insert_random_pomiary():
     stany_awaryjne = ["OSTR", "GRAN", "OJOJ"]
 
     command = """
-    INSERT INTO pomiary (data, godzina, stacja, predkosc, liczba_osi, dlugosc, masa, GH, GM, OK, PM, PD) 
-    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO pomiary (data, godzina, stacja, predkosc, liczba_osi, dlugosc, GH, GM, OK, PM) 
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
-    for i in range(0, 10000):
+    for i in range(0, n):
         random_datetime = random_date(d1, d2)
         data.append(random_datetime.date())
         godzina.append(random_datetime.time())
@@ -93,7 +108,6 @@ def insert_random_pomiary():
         predkosc.append(round(random.uniform(33.33, 215.66), 2))
         liczba_osi.append(random.randint(6, 150))
         dlugosc.append(round(random.uniform(33.33, 215.66), 2))
-        masa.append(round(random.uniform(1599.23, 1232438.88), 2))
 
         if random.randint(0, 100) >= 80:
             GH.append(random.choice(stany_awaryjne))
@@ -115,23 +129,29 @@ def insert_random_pomiary():
         else:
             PM.append(None)
 
-        if random.randint(0, 100) >= 80:
-            PD.append(random.choice(stany_awaryjne))
-        else:
-            PD.append(None)
-
-    for i in range(0, 10000):
-        cur.execute(command, (data[i], godzina[i], stacja[i], predkosc[i], liczba_osi[i], dlugosc[i], masa[i], GH[i],
-                              GM[i], OK[i], PM[i], PD[i]))
+    for i in range(0, n):
+        cursor.execute(command, [data[i], godzina[i], stacja[i], predkosc[i], liczba_osi[i], dlugosc[i], GH[i],
+                                       GM[i], OK[i], PM[i]])
 
 
-# Open a cursor to perform database operations
-cur = db_restore.conn.cursor()
+print('1. insert_random_uzytkownik()')
+print('2. insert_przewoznicy_from_csv()')
+print('3. insert_random_pomiary(n)')
+print('0. Wyjście')
 
-insert_random_pomiary()
-# Commit changes
-# _setup.conn.commit()
+while True:
+    choice = int(input('Wybór: '))
+    if choice == 1:
+        n = int(input('Liczba użytkowników: '))
+        for i in range(n):
+            insert_random_uzytkownik()
+    elif choice == 2:
+        insert_przewoznicy_from_csv()
+    elif choice == 3:
+        n = int(input('Liczba pomiarów: '))
+        insert_random_pomiary(n)
+    elif choice == 0:
+        break
 
-cur.close()
+# db_connection.commit()
 
-db_restore.conn.close()

@@ -11,12 +11,13 @@ class ASDEKServer:
     def __init__(self):
         """ Initialing the TCP server and database connection """
 
+        # Read the config file
         with open('config.json', 'r', encoding='utf-8') as config_file:
             config = json.load(config_file)
             self.HOST = config["server_host"]
             self.PORT = config["server_port"]
 
-            # Establishing database connection
+            # Establish database connection
             self.db_connection = psycopg2.connect(
                 host=config["db_host"],
                 database=config["db_database"],
@@ -25,11 +26,8 @@ class ASDEKServer:
                 port=config["db_port"]
             )
 
-        # Opening a cursor to perform database operations
+        # Open a cursor to perform database operations
         self.cursor = self.db_connection.cursor()
-
-        # Current connected clients count
-        self.connections = 0
 
     def __del__(self):
         """ Closing database connection after terminating the server application """
@@ -38,9 +36,9 @@ class ASDEKServer:
         self.db_connection.close()
 
     def run(self):
-        """ Running the server application, waiting for clients """
+        """ Opening the server application and waiting for clients """
 
-        # Creating TCP socket
+        # Create TCP socket
         with socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM) as s:
             try:
                 s.bind((self.HOST, self.PORT))
@@ -50,6 +48,7 @@ class ASDEKServer:
             print('Listening...')
             s.listen(5)
 
+            # Wait for clients
             while True:
                 client, address = s.accept()
 
@@ -59,8 +58,8 @@ class ASDEKServer:
                     args=(client,)
                 )
                 client_handler.start()
-                self.connections += 1
-                print('Connection Request: ' + str(self.connections))
+
+                print('New connection request')
 
     def handle_client(self, connection):
         """ Getting request from the client """
@@ -88,32 +87,37 @@ class ASDEKServer:
         elif request == 'archiwum':
             self.request_archiwum(connection)
 
+        elif request == 'przewoznicy':
+            self.request_przewoznicy(connection)
+
+        elif request == 'raportg':
+            self.request_raportg(connection)
+
+        elif request == 'pomiar':
+            self.request_pomiar(connection)
+
         else:
             connection.send(str.encode('wrong request'))
-
-        self.connections -= 1
 
     def request_log_in(self, connection):
         """ Handling logging-in request """
 
         # Receive username
-        username = connection.recv(2048)
+        username = connection.recv(2048).decode('utf-8')
         # Receive password
-        password = connection.recv(2048)
-        username = username.decode()
-        password = password.decode()
-        if sf.auth_successful(self.cursor, username, password):
+        password = connection.recv(2048).decode('utf-8')
+
+        if sf.user_auth(self.cursor, username, password):
             connection.send(str.encode('1'))
         else:
             connection.send(str.encode('0'))
 
     def request_ersat(self, connection):
-        """ Handling inserting into 'ersat' table request """
+        """ Handling inserting into 'ersat' table """
 
         # Receive record from the client in JSON format
-        record = connection.recv(2048)
-        record = record.decode('utf-8')
-        if sf.insert_into_ersat(self.db_connection, self.cursor, record):
+        record = connection.recv(2048).decode('utf-8')
+        if sf.insert_ersat(self.db_connection, self.cursor, record):
 
             # If Success, send '1'
             connection.send(str.encode('1'))
@@ -121,14 +125,42 @@ class ASDEKServer:
     def request_raport(self, connection, records_qty):
         """ Handling query for most recent 1 or 100 record/s from 'pomiary' table and sending as JSON """
 
-        sf.fetch_reports(self.cursor, records_qty, connection)
+        records_json = sf.get_reports(self.cursor, records_qty)
+        for record in records_json:
+            connection.send(bytes(record, encoding='utf-8'))
         connection.send(str.encode('0'))
 
     def request_archiwum(self, connection):
-        """ Handling query for all records from 'ersat' table and sending as JSON """
+        """ Handling query for all records of specific station from 'ersat' table and sending as JSON """
 
-        sf.fetchall_ersat(self.cursor, connection)
+        stacja_diagnost = connection.recv(2048).decode('utf-8')
+        sf.get_ersat(self.cursor, connection, stacja_diagnost)
         connection.send(str.encode('0'))
+
+    def request_przewoznicy(self, connection):
+        """ Handling query for all records from 'przewoznicy' table and sending as JSON """
+
+        records_json = sf.get_przewoznicy(self.cursor)
+        for record in records_json:
+            connection.send(bytes(record, encoding='utf-8'))
+        connection.send(str.encode('0'))
+
+    def request_raportg(self, connection):
+        """ Handling query for total number of records and not null values in columns: 'gh', 'gm', 'ok', 'pm'
+            for specific station in table 'pomiary' """
+
+        stacja_diagnost = connection.recv(2048).decode('utf-8')
+        data = sf.get_raportg_data(self.cursor, stacja_diagnost)
+        connection.send(bytes(data, encoding='utf-8'))
+
+    def request_pomiar(self, connection):
+        """ Handling inserting received record to 'pomiary' table """
+
+        pomiar_json = connection.recv(2048).decode('utf-8')
+        if sf.insert_pomiar(self.db_connection, self.cursor, pomiar_json):
+            connection.send(str.encode('1'))
+        else:
+            connection.send(str.encode('0'))
 
 
 server = ASDEKServer()
