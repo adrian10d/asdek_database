@@ -6,6 +6,7 @@ from datetime import timedelta
 from datetime import datetime
 import server_functions as sf
 
+
 # Read the config file
 with open('config.json', 'r', encoding='utf-8') as config_file:
     config = json.load(config_file)
@@ -131,7 +132,7 @@ def insert_random_pomiary(n):
 
     for i in range(0, n):
         cursor.execute(command, [data[i], godzina[i], stacja[i], predkosc[i], liczba_osi[i], dlugosc[i], GH[i],
-                                       GM[i], OK[i], PM[i]])
+                                 GM[i], OK[i], PM[i]])
 
 
 print('1. insert_random_uzytkownik()')
@@ -145,13 +146,16 @@ while True:
         n = int(input('Liczba użytkowników: '))
         for i in range(n):
             insert_random_uzytkownik()
+        db_connection.commit()
     elif choice == 2:
         insert_przewoznicy_from_csv()
+        db_connection.commit()
     elif choice == 3:
         n = int(input('Liczba pomiarów: '))
         insert_random_pomiary(n)
+        db_connection.commit()
     elif choice == 0:
         break
 
-# db_connection.commit()
-
+cursor.close()
+db_connection.close()

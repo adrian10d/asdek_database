@@ -26,7 +26,7 @@ def request_esrat():
     ersat_record = {
         "data": "18.01.2022",
         "godzina": "13:46",
-        "nazwa_stacji_diagnostycznej": "Września",
+        "stacja": "Września",
         "kierunek": "1",
         "predkosc": "62.4",
         "liczba_osi": "12",
@@ -36,7 +36,7 @@ def request_esrat():
         "funkcja_potwierdzajacego": "Konduktor",
         "nr_kolejny_pojazdu": "98",
         "nr_pojazdu_kolejowego": "97",
-        "fk_przewoznik": "5",
+        "przewoznik": "Alusta S.A.",
         "uwagi": "Tory byly zle i podwozie tez bylo zle"
     }
     ersat_json = json.dumps(ersat_record, ensure_ascii=False)

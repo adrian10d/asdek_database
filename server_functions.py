@@ -44,13 +44,14 @@ def insert_ersat(db_connection, cursor, record):
     fk_przewoznik, uwagi) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
               """
 
-
+    cursor.execute('SELECT przewoznik_id FROM przewoznicy WHERE przewoznik = %s', [record['przewoznik']])
+    fk_przewoznik = cursor.fetchone()
+    print(fk_przewoznik)
     cursor.execute(command, [record["data"], record["godzina"], record["stacja"],
                              record["kierunek"], record["predkosc"], record["liczba_osi"], record["dlugosc"],
                              record["nr_pociagu"], record["imie_nazwisko_potwierdzajacego"],
                              record["funkcja_potwierdzajacego"], record["nr_kolejny_pojazdu"],
-                             record["nr_pojazdu_kolejowego"], record["fk_przewoznik"], record["uwagi"]])
-
+                             record["nr_pojazdu_kolejowego"], fk_przewoznik, record["uwagi"]])
 
     db_connection.commit()
     return True
@@ -67,6 +68,7 @@ def get_reports(cursor, records_qty):
     fetched_rows = cursor.fetchmany(records_qty)
     records_json = []
     for row in fetched_rows:
+        print(row)
         record_dict = {
             "data": row[1].strftime("%d.%m.%Y"),
             "godzina": row[2].strftime("%H:%M:%S"),
@@ -74,10 +76,10 @@ def get_reports(cursor, records_qty):
             "predkosc": float(row[4]),
             "liczba_osi": int(row[5]),
             "dlugosc": float(row[6]),
-            "GH": row[8],
-            "GM": row[9],
-            "OK": row[10],
-            "PM": row[11]
+            "GH": row[7],
+            "GM": row[8],
+            "OK": row[9],
+            "PM": row[10]
         }
         records_json.append(json.dumps(record_dict, ensure_ascii=False))
     return records_json

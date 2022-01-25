@@ -31,7 +31,9 @@ CREATE TABLE uzytkownicy(
  imie VARCHAR(50) NOT NULL,
  nazwisko VARCHAR(50) NOT NULL,
  login VARCHAR(30) NOT NULL,
- haslo CHAR(96) NOT NULL)
+ haslo CHAR(96) NOT NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+ updated_at TIMESTAMP NOT NULL DEFAULT NOW())
 """
 
 create_table_przewoznicy = """
@@ -40,7 +42,9 @@ CREATE TABLE przewoznicy(
  przewoznik VARCHAR(128) NOT NULL,
  przewoz_osob_nr_licencji VARCHAR(30),
  przewoz_rzeczy_nr_licencji VARCHAR(30),
- swiadczenie_uslug_trakcyjnych_nr_licencji VARCHAR(30))
+ swiadczenie_uslug_trakcyjnych_nr_licencji VARCHAR(30),
+ created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+ updated_at TIMESTAMP NOT NULL DEFAULT NOW())
 """
 
 create_table_pomiary = """
@@ -55,7 +59,9 @@ dlugosc DECIMAL(6, 2),
 GH CHAR(4),
 GM CHAR(4),
 OK CHAR(4),
-PM CHAR(4))
+PM CHAR(4),
+created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+updated_at TIMESTAMP NOT NULL DEFAULT NOW())
 """
 
 create_table_ersat = """
@@ -73,7 +79,9 @@ imie_nazwisko_potwierdzajacego VARCHAR(100) NOT NULL,
 funkcja_potwierdzajacego VARCHAR(20) NOT NULL,
 nr_kolejny_pojazdu SMALLINT NOT NULL,
 nr_pojazdu_kolejowego SMALLINT NOT NULL,
-uwagi TEXT)
+uwagi TEXT,
+created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+updated_at TIMESTAMP NOT NULL DEFAULT NOW())
 """
 
 add_fk_to_ersat = """
@@ -93,8 +101,9 @@ OK CHAR(4),
 PM CHAR(4),
 wart_przekroczenia DECIMAL(7, 3),
 kontynuacja_jazdy BOOLEAN,
-potwierdzona BOOLEAN
-)
+potwierdzona BOOLEAN,
+created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+updated_at TIMESTAMP NOT NULL DEFAULT NOW())
 """
 
 add_fk_to_awarie = """
@@ -103,12 +112,38 @@ ADD COLUMN fk_ersat SMALLINT,
 ADD FOREIGN KEY (fk_ersat) REFERENCES ersat(ersat_id)
 """
 
+
+transaction_timestamp_triggers = """
+CREATE OR REPLACE FUNCTION updated_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW; 
+END;
+$$ language 'plpgsql';
+
+
+CREATE TRIGGER uzytkownicy_timestamp BEFORE UPDATE ON uzytkownicy FOR EACH ROW EXECUTE PROCEDURE  updated_timestamp();
+CREATE TRIGGER przewoznicy_timestamp BEFORE UPDATE ON przewoznicy FOR EACH ROW EXECUTE PROCEDURE  updated_timestamp();
+CREATE TRIGGER pomiary_timestamp BEFORE UPDATE ON pomiary FOR EACH ROW EXECUTE PROCEDURE  updated_timestamp();
+CREATE TRIGGER ersat_timestamp BEFORE UPDATE ON ersat FOR EACH ROW EXECUTE PROCEDURE  updated_timestamp();
+CREATE TRIGGER awarie_timestamp BEFORE UPDATE ON awarie FOR EACH ROW EXECUTE PROCEDURE  updated_timestamp();
+"""
+
+
 commands = [create_table_uzytkownicy, create_table_przewoznicy, create_table_pomiary,
-            create_table_ersat, add_fk_to_ersat, create_table_awarie, add_fk_to_awarie]
+            create_table_ersat, add_fk_to_ersat, create_table_awarie, add_fk_to_awarie,
+            transaction_timestamp_triggers]
 
 
 for command in commands:
     cursor.execute(command)
-# db_connection.commit()
+    db_connection.commit()
+
+
+
+
+
+
 
 
