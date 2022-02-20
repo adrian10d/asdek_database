@@ -2,7 +2,9 @@ import socket
 import threading
 import psycopg2
 import json
-import server_functions as sf
+import queries as query
+import db_restore
+import testing
 
 
 class ASDEKServer:
@@ -32,8 +34,11 @@ class ASDEKServer:
     def __del__(self):
         """ Closing database connection after terminating the server application """
 
-        self.cursor.close()
-        self.db_connection.close()
+        try:
+            self.cursor.close()
+            self.db_connection.close()
+        except AttributeError:
+            return
 
     def run(self):
         """ Opening the server application and waiting for clients """
@@ -96,6 +101,12 @@ class ASDEKServer:
         elif request == 'pomiar':
             self.request_pomiar(connection)
 
+        elif request == 'add_user':
+            self.request_add_user(connection)
+
+        elif request == 'insert_test':
+            testing.tests.run()
+
         else:
             connection.send(str.encode('wrong request'))
 
@@ -107,7 +118,7 @@ class ASDEKServer:
         # Receive password
         password = connection.recv(2048).decode('utf-8')
 
-        if sf.user_auth(self.cursor, username, password):
+        if query.user_auth(self.cursor, username, password):
             connection.send(str.encode('1'))
         else:
             connection.send(str.encode('0'))
@@ -115,17 +126,30 @@ class ASDEKServer:
     def request_ersat(self, connection):
         """ Handling inserting into 'ersat' table """
 
-        # Receive record from the client in JSON format
+        # Receive record from the client in JSON format and insert into 'ersat' table
+        awarie = []
         record = connection.recv(2048).decode('utf-8')
-        if sf.insert_ersat(self.db_connection, self.cursor, record):
-
-            # If Success, send '1'
-            connection.send(str.encode('1'))
+        ersat_id = query.insert_ersat(self.db_connection, self.cursor, record)
+        print(ersat_id)
+        i = 0
+        while True:
+            awaria = connection.recv(2048).decode('utf-8')
+            if awaria == '0':
+                break
+            else:
+                print(awaria)
+                awarie.append(awaria)
+                i += 1
+                connection.send(str.encode('awaria ' + str(i) + ' received'))
+        query.insert_awarie(self.db_connection, self.cursor, awarie, ersat_id)
+        message = 'No. of awarie received: ' + str(i)
+        connection.send(str.encode(message))
+        print(message)
 
     def request_raport(self, connection, records_qty):
         """ Handling query for most recent 1 or 100 record/s from 'pomiary' table and sending as JSON """
 
-        records_json = sf.get_reports(self.cursor, records_qty)
+        records_json = query.get_reports(self.cursor, records_qty)
         for record in records_json:
             connection.send(bytes(record, encoding='utf-8'))
         connection.send(str.encode('0'))
@@ -134,13 +158,13 @@ class ASDEKServer:
         """ Handling query for all records of specific station from 'ersat' table and sending as JSON """
 
         stacja_diagnost = connection.recv(2048).decode('utf-8')
-        sf.get_ersat(self.cursor, connection, stacja_diagnost)
+        query.get_ersat(self.cursor, connection, stacja_diagnost)
         connection.send(str.encode('0'))
 
     def request_przewoznicy(self, connection):
         """ Handling query for all records from 'przewoznicy' table and sending as JSON """
 
-        records_json = sf.get_przewoznicy(self.cursor)
+        records_json = query.get_przewoznicy(self.cursor)
         for record in records_json:
             connection.send(bytes(record, encoding='utf-8'))
         connection.send(str.encode('0'))
@@ -150,18 +174,38 @@ class ASDEKServer:
             for specific station in table 'pomiary' """
 
         stacja_diagnost = connection.recv(2048).decode('utf-8')
-        data = sf.get_raportg_data(self.cursor, stacja_diagnost)
+        data = query.get_raportg_data(self.cursor, stacja_diagnost)
         connection.send(bytes(data, encoding='utf-8'))
 
     def request_pomiar(self, connection):
         """ Handling inserting received record to 'pomiary' table """
 
         pomiar_json = connection.recv(2048).decode('utf-8')
-        if sf.insert_pomiar(self.db_connection, self.cursor, pomiar_json):
+        if query.insert_pomiar(self.db_connection, self.cursor, pomiar_json):
             connection.send(str.encode('1'))
         else:
             connection.send(str.encode('0'))
 
+    def request_add_user(self, connection):
+        # Receive username
+        name = connection.recv(2048).decode('utf-8')
+        # Receive password
+        surname = connection.recv(2048).decode('utf-8')
+        # Receive username
+        username = connection.recv(2048).decode('utf-8')
+        # Receive password
+        password = connection.recv(2048).decode('utf-8')
 
+        if query.insert_user(self.db_connection, self.cursor, name, surname, username, password):
+            print('Successfully added new user ' + name + ' ' + surname)
+            connection.send(str.encode('1'))
+
+
+# Try to restore the database (finalized only while initial run)
+db_restore.restore()
+
+# Run the actual server function
 server = ASDEKServer()
 server.run()
+
+

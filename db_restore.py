@@ -1,21 +1,6 @@
-import json
-import psycopg2
-
-# Read the config file
-with open('config.json', 'r', encoding='utf-8') as config_file:
-    config = json.load(config_file)
-
-    # Establish database connection
-    db_connection = psycopg2.connect(
-        host=config["db_host"],
-        database=config["db_database"],
-        user=config["db_user"],
-        password=config["db_password"],
-        port=config["db_port"]
-        )
-
-    # Open a cursor to perform database operations
-    cursor = db_connection.cursor()
+import csv
+from testing import tests
+import _config
 
 create_database = """
 CREATE DATABASE asdek
@@ -74,21 +59,14 @@ kierunek CHAR(1) NOT NULL,
 predkosc DECIMAL(6, 2), 
 liczba_osi SMALLINT NOT NULL,
 dlugosc DECIMAL(6, 2),
-nr_pociagu SMALLINT NOT NULL,
+nr_pociagu VARCHAR(36) NOT NULL,
 imie_nazwisko_potwierdzajacego VARCHAR(100) NOT NULL,
 funkcja_potwierdzajacego VARCHAR(20) NOT NULL,
-nr_kolejny_pojazdu SMALLINT NOT NULL,
-nr_pojazdu_kolejowego SMALLINT NOT NULL,
 uwagi TEXT,
 created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 updated_at TIMESTAMP NOT NULL DEFAULT NOW())
 """
 
-add_fk_to_ersat = """
-ALTER TABLE ersat
-ADD COLUMN fk_przewoznik SMALLINT,
-ADD FOREIGN KEY (fk_przewoznik) REFERENCES przewoznicy(przewoznik_id)
-"""
 
 create_table_awarie = """
 CREATE TABLE awarie(
@@ -99,19 +77,26 @@ GH CHAR(4),
 GM CHAR(4),
 OK CHAR(4),
 PM CHAR(4),
-wart_przekroczenia DECIMAL(7, 3),
+wart_przekroczenia CHAR(4),
 kontynuacja_jazdy BOOLEAN,
 potwierdzona BOOLEAN,
+nr_kolejny_pojazdu VARCHAR(36) NOT NULL,
+nr_pojazdu_kolejowego VARCHAR(36) NOT NULL,
 created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 updated_at TIMESTAMP NOT NULL DEFAULT NOW())
 """
 
-add_fk_to_awarie = """
+add_fk_ersat_to_awarie = """
 ALTER TABLE awarie
 ADD COLUMN fk_ersat SMALLINT,
 ADD FOREIGN KEY (fk_ersat) REFERENCES ersat(ersat_id)
 """
 
+add_fk_przewoznik_to_awarie = """
+ALTER TABLE awarie
+ADD COLUMN fk_przewoznik SMALLINT,
+ADD FOREIGN KEY (fk_przewoznik) REFERENCES przewoznicy(przewoznik_id)
+"""
 
 transaction_timestamp_triggers = """
 CREATE OR REPLACE FUNCTION updated_timestamp()
@@ -131,14 +116,61 @@ CREATE TRIGGER awarie_timestamp BEFORE UPDATE ON awarie FOR EACH ROW EXECUTE PRO
 """
 
 
+def table_exists():
+    _config.cursor.execute("SELECT EXISTS(SELECT * from information_schema.tables WHERE table_name=%s)", ('uzytkownicy',))
+    return _config.cursor.fetchone()[0]
+
+
+def insert_przewoznicy_from_csv():
+    with open('_files\\przewoznicy.csv') as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=';')
+        line_count = 0
+        przewoznik, przewoz_osob_nr_licencji, przewoz_rzeczy_nr_licencji, swiadczenie_uslug_trakcyjnych_nr_licencji =\
+            [], [], [], []
+        for row in csv_reader:
+            if line_count == 0:
+                line_count += 1
+                continue
+            przewoznik.append(row[1])
+            przewoz_osob_nr_licencji.append(row[2])
+            przewoz_rzeczy_nr_licencji.append(row[4])
+            swiadczenie_uslug_trakcyjnych_nr_licencji.append(row[6])
+            line_count += 1
+        print(swiadczenie_uslug_trakcyjnych_nr_licencji)
+        print(f'Processed {line_count} lines.')
+        command = "INSERT INTO przewoznicy (przewoznik, przewoz_osob_nr_licencji, przewoz_rzeczy_nr_licencji," \
+                  "swiadczenie_uslug_trakcyjnych_nr_licencji) VALUES(%s, %s, %s, %s);"
+
+        for i in range(len(przewoznik)):
+            print(i)
+            _config.cursor.execute(command, (przewoznik[i], przewoz_osob_nr_licencji[i], przewoz_rzeczy_nr_licencji[i],
+                                     swiadczenie_uslug_trakcyjnych_nr_licencji[i]))
+
+
 commands = [create_table_uzytkownicy, create_table_przewoznicy, create_table_pomiary,
-            create_table_ersat, add_fk_to_ersat, create_table_awarie, add_fk_to_awarie,
+            create_table_ersat, create_table_awarie, add_fk_ersat_to_awarie, add_fk_przewoznik_to_awarie,
             transaction_timestamp_triggers]
 
 
-for command in commands:
-    cursor.execute(command)
-    db_connection.commit()
+def restore():
+    if table_exists():
+        return
+    else:
+        print('Restoring database...')
+        for command in commands:
+            _config.cursor.execute(command)
+            _config.db_connection.commit()
+        insert_przewoznicy_from_csv()
+        _config.db_connection.commit()
+
+        print("Database restored.")
+        choice = input("Insert test values? [Y/N] ")
+        if choice == 'Y' or choice == 'y':
+            tests.run()
+        else:
+            pass
+
+
 
 
 

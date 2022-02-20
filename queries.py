@@ -12,7 +12,7 @@ ______________________________________________
 def hash_function(plaintext):
     salt = b'\x89\x9b\xeb\x99\xf6\xb7\xfb\x93\xcdY\x97\x86\xcfOp?wBw\x80\x95\xb0\xb1\x0c\xf4\xbb\xd5\xab\xb1\x1a;\x1e'
     plaintext = plaintext.encode()
-    digest = hashlib.pbkdf2_hmac('sha384', plaintext, salt, 111198)
+    digest = hashlib.pbkdf2_hmac('sha384', plaintext, salt=salt, iterations=111198)
     hex_hash = digest.hex()
     return hex_hash
 
@@ -39,20 +39,38 @@ def insert_ersat(db_connection, cursor, record):
 
     record = json.loads(record)
     command = """
-    INSERT INTO ersat (data, godzina, stacja, kierunek, predkosc, liczba_osi, dlugosc,
-    nr_pociagu, imie_nazwisko_potwierdzajacego, funkcja_potwierdzajacego, nr_kolejny_pojazdu, nr_pojazdu_kolejowego,
-    fk_przewoznik, uwagi) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO ersat (data, godzina, stacja, kierunek, predkosc, liczba_osi, dlugosc,
+        nr_pociagu, imie_nazwisko_potwierdzajacego, funkcja_potwierdzajacego, uwagi)
+        VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING ersat_id
               """
 
-    cursor.execute('SELECT przewoznik_id FROM przewoznicy WHERE przewoznik = %s', [record['przewoznik']])
-    fk_przewoznik = cursor.fetchone()
-    print(fk_przewoznik)
     cursor.execute(command, [record["data"], record["godzina"], record["stacja"],
                              record["kierunek"], record["predkosc"], record["liczba_osi"], record["dlugosc"],
                              record["nr_pociagu"], record["imie_nazwisko_potwierdzajacego"],
-                             record["funkcja_potwierdzajacego"], record["nr_kolejny_pojazdu"],
-                             record["nr_pojazdu_kolejowego"], fk_przewoznik, record["uwagi"]])
+                             record["funkcja_potwierdzajacego"], record["uwagi"]])
 
+    db_connection.commit()
+
+    # Return 'ersat_id' of just inserted row
+    return cursor.fetchone()[0]
+
+
+def insert_awarie(db_connection, cursor, records, fk_ersat):
+    awarie = [json.loads(rekord) for rekord in records]
+    command = """
+    INSERT INTO awarie (os_od_poczatku, os_od_konca, gh, gm, ok, pm, wart_przekroczenia,
+    kontynuacja_jazdy, potwierdzona, nr_kolejny_pojazdu, nr_pojazdu_kolejowego, fk_ersat, fk_przewoznik)
+    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+              """
+
+    for awaria in awarie:
+        cursor.execute('SELECT przewoznik_id FROM przewoznicy WHERE przewoznik = %s', [awaria['przewoznik']])
+        fk_przewoznik = cursor.fetchone()
+        cursor.execute(command, [awaria["os_od_poczatku"], awaria["os_od_konca"], awaria["gh"], awaria["gm"],
+                                 awaria["ok"], awaria["pm"], awaria["wart_przekroczenia"], awaria["kontynuacja_jazdy"],
+                                 awaria["potwierdzona"], awaria["nr_kolejny_pojazdu"], awaria["nr_pojazdu_kolejowego"],
+                                 fk_ersat, fk_przewoznik])
     db_connection.commit()
     return True
 
@@ -89,8 +107,8 @@ def get_ersat(cursor, connection, stacja_diagnost):
     """ Fetching all records from 'ersat' table, joining 'awarie' info and returning as a list of JSON objects """
 
     command = """
-        SELECT ersat.nr_pojazdu_kolejowego, ersat.data, ersat.godzina,
-        ersat.stacja, awarie.gh, awarie.gm, awarie.ok, awarie.pm
+        SELECT ersat.data, ersat.godzina,
+        ersat.stacja, awarie.nr_pojazdu_kolejowego, awarie.gh, awarie.gm, awarie.ok, awarie.pm
         FROM ersat
         LEFT JOIN awarie
         ON ersat.ersat_id = awarie.fk_ersat
@@ -99,6 +117,7 @@ def get_ersat(cursor, connection, stacja_diagnost):
     cursor.execute(command, [stacja_diagnost])
     fetched_rows = cursor.fetchall()
     for row in fetched_rows:
+        print(row)
         if row[4] is not None:
             stan_awaryjny = 'GH'
             wartosc_stanu_awaryjnego = row[4]
@@ -115,11 +134,11 @@ def get_ersat(cursor, connection, stacja_diagnost):
             continue
 
         record_dict = {
-            "nr_pojazdu_kolejowego": row[0],
+            "nr_pojazdu_kolejowego": row[3],
             "stan_awaryjny": stan_awaryjny,
-            "data": row[1].strftime("%d.%m.%Y"),
-            "godzina": row[2].strftime("%H:%M:%S"),
-            "stacja": row[3],
+            "data": row[0].strftime("%d.%m.%Y"),
+            "godzina": row[1].strftime("%H:%M:%S"),
+            "stacja": row[2],
             "wartosc_stanu_awaryjnego": wartosc_stanu_awaryjnego
         }
         record_json = json.dumps(record_dict, ensure_ascii=False)
@@ -185,5 +204,16 @@ def insert_pomiar(db_connection, cursor, pomiar_json):
                              pomiar_dict["gh"], pomiar_dict["gm"], pomiar_dict["ok"], pomiar_dict["pm"],))
 
     # Commit changes
+    db_connection.commit()
+    return True
+
+
+def insert_user(db_connection, cursor, name, surname, login, password):
+
+    command = """
+    INSERT INTO uzytkownicy (imie, nazwisko, login, haslo)
+    VALUES(%s, %s, %s, %s)
+    """
+    cursor.execute(command, [name, surname, login, hash_function(password)])
     db_connection.commit()
     return True
